@@ -1,7 +1,9 @@
 import argparse
+import http.client
 import json
 import pathlib
 import sys
+import urllib.parse
 
 from sneppx_forge.signing import sign_bytes
 from sneppx_forge.registry import ModelRegistry
@@ -30,6 +32,13 @@ def main(argv=None):
     verify = sub.add_parser("verify", help="verify a model's signature")
     verify.add_argument("name")
     verify.add_argument("--public-key", help="override public key hex")
+    verify.add_argument("--remote", help="verify against a remote registry server, e.g. http://localhost:8010")
+    verify.add_argument("--token", help="Bearer token for the remote server (or set SNEPPX_FORGE_TOKEN)")
+
+    serve = sub.add_parser("serve", help="run the registry REST server (needs fastapi+uvicorn)")
+    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--port", type=int, default=8010)
+    serve.add_argument("--token", help="require Bearer auth (default: $SNEPPX_FORGE_TOKEN)")
 
     rm = sub.add_parser("delete", help="unregister a model")
     rm.add_argument("name")
@@ -65,6 +74,8 @@ def main(argv=None):
         return 0
 
     if args.command == "verify":
+        if args.remote:
+            return _verify_remote(args)
         pk = bytes.fromhex(args.public_key) if args.public_key else None
         ok, detail = registry.verify(args.name, public_key=pk)
         if ok:
@@ -72,6 +83,16 @@ def main(argv=None):
             return 0
         print(f"FAIL: {detail.get('error')}", file=sys.stderr)
         return 1
+
+    if args.command == "serve":
+        from sneppx_forge.api import create_app
+
+        token = args.token or None
+        app = create_app(registry=registry, token=token)
+        import uvicorn
+
+        uvicorn.run(app, host=args.host, port=args.port)
+        return 0
 
     if args.command == "delete":
         removed = registry.unregister(args.name)
@@ -92,6 +113,62 @@ def _resolve_secret_key(value):
         except (json.JSONDecodeError, KeyError):
             return text
     return value
+
+
+def _http_json(method, url, headers=None, body=None):
+    """Minimal stdlib HTTP client returning parsed JSON + status."""
+    parsed = urllib.parse.urlsplit(url)
+    scheme = parsed.scheme or "http"
+    cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
+    port = parsed.port or (443 if scheme == "https" else 80)
+    conn = cls(parsed.hostname, port, timeout=15)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    payload = None if body is None else json.dumps(body)
+    headers = dict(headers or {})
+    if payload is not None:
+        headers.setdefault("Content-Type", "application/json")
+    conn.request(method, path, body=payload, headers=headers)
+    resp = conn.getresponse()
+    data = resp.read().decode("utf-8", "replace")
+    conn.close()
+    try:
+        parsed_json = json.loads(data)
+    except (json.JSONDecodeError, ValueError):
+        parsed_json = {"detail": data}
+    return resp.status, parsed_json
+
+
+def _verify_remote(args):
+    import os
+
+    token = args.token or os.environ.get("SNEPPX_FORGE_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    url = f"{args.remote.rstrip('/')}/v1/models/{urllib.parse.quote(args.name)}/verify"
+    body = {}
+    if args.public_key:
+        body["public_key"] = args.public_key
+    try:
+        status, data = _http_json("POST", url, headers=headers, body=body)
+    except OSError as exc:
+        print(f"FAIL: cannot reach registry ({exc})", file=sys.stderr)
+        return 2
+    if status == 401:
+        print(f"FAIL: unauthorized - set --token or SNEPPX_FORGE_TOKEN", file=sys.stderr)
+        return 2
+    if status == 404:
+        print(f"FAIL: unknown model on registry", file=sys.stderr)
+        return 2
+    if status != 200:
+        print(f"FAIL: registry error {status}: {data}", file=sys.stderr)
+        return 2
+    if data.get("verified"):
+        print(f"OK: signature verified remotely ({args.name})")
+        return 0
+    detail = data.get("detail") or {}
+    print(f"FAIL: {detail.get('error')}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

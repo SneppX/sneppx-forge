@@ -1,0 +1,11 @@
+services:
+  registry:
+    build: .
+    container_name: sneppx-forge-registry
+    ports:
+      - "8010:8010"
+    environment:
+      SNEPPX_FORGE_TOKEN: "${SNEPPX_FORGE_TOKEN:-}"
+    volumes:
+      - ./sneppx-forge.json:/opt/forge/sneppx-forge.json
+    restart: unless-stopped

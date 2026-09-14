@@ -3,6 +3,9 @@ name = "sneppx-forge"
 version = "0.1.0"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+server = ["fastapi", "uvicorn"]
+
 [project.scripts]
 sneppx-forge = "sneppx_forge.cli:main"
 
