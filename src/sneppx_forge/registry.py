@@ -108,6 +108,23 @@ class ModelRegistry:
             entry["verified"] = True
         return ok, detail
 
+    def download(self, name, dest_dir="."):
+        """Download a registered model's artifact to *dest_dir*.
+
+        Returns ``(path, detail)`` where *path* is the local file path.
+        """
+        entry = self._models.get(name)
+        if entry is None:
+            return None, {"error": "unknown model", "name": name}
+        uri = entry["uri"]
+        src = pathlib.Path(uri)
+        if not src.is_file():
+            return None, {"error": "not a local file", "uri": uri}
+        dest = pathlib.Path(dest_dir) / src.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(src.read_bytes())
+        return dest, {"name": name, "path": str(dest), "size": dest.stat().st_size}
+
     # -- persistence -------------------------------------------------------
 
     def save(self, path=None):
