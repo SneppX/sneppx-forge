@@ -66,8 +66,14 @@ class ModelRegistry:
     def list(self):
         return list(self._models.values())
 
-    def unregister(self, name):
-        return self._models.pop(name, None)
+    def search(self, tag=None):
+        """Return list of entries that contain *tag* in their tags list.
+
+        If *tag* is None, return all entries.
+        """
+        if tag is None:
+            return self.list()
+        return [e for e in self._models.values() if tag in (e.get("tags") or [])]
 
     def verify(self, name, public_key=None, artifact_bytes=None):
         """Verify a registered listing's signature at call time.
