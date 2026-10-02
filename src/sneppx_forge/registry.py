@@ -75,6 +75,16 @@ class ModelRegistry:
             return self.list()
         return [e for e in self._models.values() if tag in (e.get("tags") or [])]
 
+    def stats(self):
+        """Return registry statistics: total, verified, unverified counts."""
+        total = len(self._models)
+        verified = sum(1 for e in self._models.values() if e.get("verified"))
+        return {
+            "total": total,
+            "verified": verified,
+            "unverified": total - verified,
+        }
+
     def verify(self, name, public_key=None, artifact_bytes=None):
         """Verify a registered listing's signature at call time.
 
