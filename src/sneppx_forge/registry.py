@@ -1,4 +1,4 @@
-"""Persistent, signed model registry for the SneppX Forge.
+﻿"""Persistent, signed model registry for the SneppX Forge.
 
 A listing is only marked ``verified`` once its Ed25519 signature payload has
 been checked against the artifact (or an explicit public key). The registry
@@ -24,8 +24,9 @@ class ModelRegistry:
 
     # -- core registry ops -------------------------------------------------
 
-    def register(self, name, uri, signature=None, *, version="1.0.0",
-                 kind="model", tags=None):
+    def register(
+        self, name, uri, signature=None, *, version="1.0.0", kind="model", tags=None
+    ):
         """Register (or update) a model listing.
 
         ``signature`` is an Ed25519 payload dict (see :mod:`sneppx_forge.signing`).
@@ -59,6 +60,10 @@ class ModelRegistry:
         self._models[name] = entry
         self._next += 1
         return entry
+
+    def unregister(self, name):
+        """Remove a listing by name. Returns True if it existed."""
+        return self._models.pop(name, None) is not None
 
     def get(self, name):
         return self._models.get(name)
@@ -101,8 +106,14 @@ class ModelRegistry:
                 artifact_bytes = self._read_artifact(entry["uri"])
             except (OSError, ValueError) as exc:
                 return False, {"error": "cannot read artifact", "detail": str(exc)}
-        ok, detail = verify_payload(artifact_bytes, entry["signature"], public_key=public_key)
-        if ok and entry["digest"] and hashlib.sha256(artifact_bytes).hexdigest() != entry["digest"]:
+        ok, detail = verify_payload(
+            artifact_bytes, entry["signature"], public_key=public_key
+        )
+        if (
+            ok
+            and entry["digest"]
+            and hashlib.sha256(artifact_bytes).hexdigest() != entry["digest"]
+        ):
             return False, {"error": "digest changed after registration"}
         if ok:
             entry["verified"] = True
@@ -132,7 +143,9 @@ class ModelRegistry:
         """
         if tag is None:
             return list(self._models.keys())
-        return [name for name, entry in self._models.items() if tag in entry.get("tags", [])]
+        return [
+            name for name, entry in self._models.items() if tag in entry.get("tags", [])
+        ]
 
     def download(self, name, dest_dir="."):
         """Download a registered model's artifact to *dest_dir*.
@@ -168,13 +181,18 @@ class ModelRegistry:
         self._models = {}
         for entry in data.get("models", []):
             self._models[entry["name"]] = entry
-        self._next = data.get("next", max([e["id"] + 1 for e in self._models.values()], default=0))
+        self._next = data.get(
+            "next", max([e["id"] + 1 for e in self._models.values()], default=0)
+        )
         self._path = str(src)
         return self
 
     def _serialize(self):
-        return {"format": "sneppx-forge-registry", "next": self._next,
-                "models": list(self._models.values())}
+        return {
+            "format": "sneppx-forge-registry",
+            "next": self._next,
+            "models": list(self._models.values()),
+        }
 
     @staticmethod
     def _read_artifact(uri):
