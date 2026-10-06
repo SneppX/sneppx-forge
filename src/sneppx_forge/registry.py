@@ -62,23 +62,29 @@ class ModelRegistry:
         return entry
 
     def unregister(self, name):
-        """Remove a listing by name. Returns True if it existed."""
-        return self._models.pop(name, None) is not None
+        """Remove a listing by name. Returns the removed entry, or None."""
+        return self._models.pop(name, None)
 
     def get(self, name):
         return self._models.get(name)
 
-    def list(self):
-        return list(self._models.values())
+    def list(self, tag=None, kind=None):
+        """Return listings, optionally filtered by tag and/or kind."""
+        out = list(self._models.values())
+        if tag is not None:
+            out = [e for e in out if tag in (e.get("tags") or [])]
+        if kind is not None:
+            out = [e for e in out if e.get("kind") == kind]
+        return out
+
+    def names(self, tag=None):
+        """Return registered model names, optionally filtered by tag."""
+        if tag is None:
+            return list(self._models.keys())
+        return [n for n, e in self._models.items() if tag in (e.get("tags") or [])]
 
     def search(self, tag=None):
-        """Return list of entries that contain *tag* in their tags list.
-
-        If *tag* is None, return all entries.
-        """
-        if tag is None:
-            return self.list()
-        return [e for e in self._models.values() if tag in (e.get("tags") or [])]
+        return self.list(tag=tag)
 
     def stats(self):
         """Return registry statistics: total, verified, unverified counts."""
@@ -118,34 +124,6 @@ class ModelRegistry:
         if ok:
             entry["verified"] = True
         return ok, detail
-
-    def download(self, name, dest_dir="."):
-        """Download a registered model's artifact to *dest_dir*.
-
-        Returns ``(path, detail)`` where *path* is the local file path.
-        """
-        entry = self._models.get(name)
-        if entry is None:
-            return None, {"error": "unknown model", "name": name}
-        uri = entry["uri"]
-        src = pathlib.Path(uri)
-        if not src.is_file():
-            return None, {"error": "not a local file", "uri": uri}
-        dest = pathlib.Path(dest_dir) / src.name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(src.read_bytes())
-        return dest, {"name": name, "path": str(dest), "size": dest.stat().st_size}
-
-    def list(self, tag=None):
-        """Return list of registered model names.
-
-        If *tag* is given, only return models that contain the tag.
-        """
-        if tag is None:
-            return list(self._models.keys())
-        return [
-            name for name, entry in self._models.items() if tag in entry.get("tags", [])
-        ]
 
     def download(self, name, dest_dir="."):
         """Download a registered model's artifact to *dest_dir*.

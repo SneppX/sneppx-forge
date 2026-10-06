@@ -22,13 +22,30 @@ def create_app(registry=None, token=None):
             raise HTTPException(status_code=401, detail="missing/invalid token")
 
     @app.get("/v1/models", dependencies=[Depends(require_auth)])
-    def list_models():
-        return {"models": registry.list()}
+    def list_models(tag: str | None = None, kind: str | None = None):
+        return {"models": registry.list(tag=tag, kind=kind)}
+
+    @app.get("/v1/stats", dependencies=[Depends(require_auth)])
+    def stats():
+        return registry.stats()
 
     @app.post("/v1/models/{name}", dependencies=[Depends(require_auth)])
-    def register(name: str, uri: str, version: str = "1.0.0",
-                 signature: dict | None = None):
-        return registry.register(name, uri, signature, version=version)
+    def register(
+        name: str,
+        uri: str,
+        version: str = "1.0.0",
+        signature: dict | None = None,
+        kind: str = "model",
+        tags: str | None = None,
+    ):
+        return registry.register(
+            name,
+            uri,
+            signature,
+            version=version,
+            kind=kind,
+            tags=tags.split(",") if tags else None,
+        )
 
     @app.get("/v1/models/{name}", dependencies=[Depends(require_auth)])
     def get_model(name: str):
