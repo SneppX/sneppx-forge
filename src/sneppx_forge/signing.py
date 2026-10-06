@@ -25,10 +25,12 @@ def sign_bytes(data, sk, key_id=None):
     }
 
 
-def verify_payload(data, payload, public_key=None):
+def verify_payload(data, payload, public_key=None, trusted_keys=None):
     """Return ``(ok, detail)`` for an Ed25519 signature payload.
 
     ``public_key`` (hex or bytes) overrides the key embedded in the payload.
+    ``trusted_keys`` (iterable of hex/bytes) is a key-rotation allowlist: the
+    effective public key must be present in it when provided.
     """
     if not isinstance(payload, dict) or payload.get("algorithm") != "ed25519":
         return False, {"error": "unsupported algorithm", "payload": payload}
@@ -40,6 +42,12 @@ def verify_payload(data, payload, public_key=None):
             return False, {"error": "no public key"}
     if isinstance(pk, str):
         pk = bytes.fromhex(pk)
+    if trusted_keys is not None:
+        allowed = set()
+        for k in trusted_keys:
+            allowed.add(bytes.fromhex(k) if isinstance(k, str) else bytes(k))
+        if pk not in allowed:
+            return False, {"error": "untrusted key (rotated/not in allowlist)"}
     try:
         sig = bytes.fromhex(payload.get("signature", ""))
     except (ValueError, TypeError):
