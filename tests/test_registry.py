@@ -68,3 +68,24 @@ def test_tampered_digest_rejects(tmp_path):
     ok, det = r.verify("m1")
     assert ok is False
     assert "hash" in det["error"]
+
+
+def test_list_filters_and_names():
+    r = ModelRegistry()
+    r.register("a", "a.bin", kind="model", tags=["llm"])
+    r.register("b", "b.bin", kind="dataset", tags=["vision"])
+    assert len(r.list(tag="llm")) == 1
+    assert len(r.list(kind="dataset")) == 1
+    assert r.names(tag="vision") == ["b"]
+    assert r.stats()["total"] == 2
+
+
+def test_trusted_keys_allowlist(tmp_path):
+    f = tmp_path / "m.bin"
+    f.write_bytes(b"x")
+    data = f.read_bytes()
+    pk1, sk1 = keypair()
+    pk2, _ = keypair()
+    sig = sign_bytes(data, sk1)
+    assert verify_payload(data, sig, trusted_keys=[pk1.hex()])[0] is True
+    assert verify_payload(data, sig, trusted_keys=[pk2.hex()])[0] is False
